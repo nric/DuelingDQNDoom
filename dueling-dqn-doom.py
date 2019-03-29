@@ -10,7 +10,7 @@ sudo apt-get install build-essential zlib1g-dev libsdl2-dev libjpeg-dev \
 nasm tar libbz2-dev libgtk2.0-dev cmake git libfluidsynth-dev libgme-dev \
 libopenal-dev timidity libwildmidi-dev unzip
 sudo apt-get install libboost-all-dev
-pip install vizdoom
+pip install vizdoom==1.1.7
 pip install -U scikit-image
 """
 
@@ -41,6 +41,12 @@ from time import sleep
 
 
 class DoubleDQNAgent:
+    """
+    This is the Agent Class which contains not only the agent but also the DDQN definition.
+    It is probably more elegent to keep the NN model class seperate and just create instances
+    but because the task is very specific it did not really matter. 
+    
+    """
 
     def __init__(self, state_size, action_size):
 
@@ -112,7 +118,7 @@ class DoubleDQNAgent:
         action_advantage = Lambda(lambda a: a[:, :] - K.mean(a[:, :], keepdims=True), output_shape=(action_size,))(action_advantage)
 
         # merge to state-action value function Q
-        state_action_value = tf.keras.layers.concatenate([state_value, action_advantage])
+        state_action_value = tf.keras.layers.add([state_value, action_advantage])
 
         #create a Model instance with the imput(state_input) and output(Q-function)
         model = Model(inputs=state_input, outputs=state_action_value)
@@ -168,50 +174,11 @@ class DoubleDQNAgent:
         if t % self.update_target_freq == 0:
             self.update_target_model()
 
+ 
     # Pick samples randomly from replay memory (with batch_size)
-    def train_minibatch_replay(self):
-        """
-        Train on a single minibatch
-        """
-        batch_size = min(self.batch_size, len(self.memory))
-        mini_batch = random.sample(self.memory, batch_size)
-
-        update_input = np.zeros(((batch_size,) + self.state_size)) # Shape 64, img_rows, img_cols, 4
-        update_target = np.zeros(((batch_size,) + self.state_size))
-        action, reward, done = [], [], []
-
-        for i in range(batch_size):
-            update_input[i,:,:,:] = mini_batch[i][0]
-            action.append(mini_batch[i][1])
-            reward.append(mini_batch[i][2])
-            update_target[i,:,:,:] = mini_batch[i][3]
-            done.append(mini_batch[i][4])
-
-        target = self.model.predict(update_input) # Shape 64, Num_Actions
-
-        target_val = self.model.predict(update_target)
-        target_val_ = self.target_model.predict(update_target)
-
-        for i in range(self.batch_size):
-            # like Q Learning, get maximum Q value at s'
-            # But from target model
-            if done[i]:
-                target[i][action[i]] = reward[i]
-            else:
-                # the key point of Double DQN
-                # selection of action is from model
-                # update is from target model
-                a = np.argmax(target_val[i])
-                target[i][action[i]] = reward[i] + self.gamma * (target_val_[i][a])
-
-        # make minibatch which includes target q value and predicted q value
-        # and do the model fit!
-        loss = self.model.train_on_batch(update_input, target)
-
-        return np.max(target[-1]), loss
-
-    # Pick samples randomly from replay memory (with batch_size)
+    # Generates array of 
     def train_replay(self):
+
 
         num_samples = min(self.batch_size * self.timestep_per_train, len(self.memory))
         replay_samples = random.sample(self.memory, num_samples)
@@ -317,12 +284,15 @@ if __name__ == "__main__":
 
         # Epsilon Greedy
         action_idx  = agent.get_action(s_t)
+        print(f"prediction: {agent.model.predict(s_t)}")
+        print(action_idx)
         if action_idx >= action_size: 
             print("WRONG ACTION GENERATED. CHECK CODE.") #Debug
             action_idx = action_size
         a_t[action_idx] = 1
 
         a_t = a_t.astype(int)
+        print(a_t)
         game.set_action(a_t.tolist())
         skiprate = agent.frame_per_action
         game.advance_action(skiprate)
@@ -413,3 +383,6 @@ if __name__ == "__main__":
                     stats_file.write('mavg_ammo_left: ' + str(agent.mavg_ammo_left) + '\n')
                     stats_file.write('mavg_kill_counts: ' + str(agent.mavg_kill_counts) + '\n')
 
+
+
+#%%
